@@ -1,4 +1,4 @@
-package pop3d
+package popart
 
 import (
 	"io"
