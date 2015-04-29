@@ -33,7 +33,6 @@ type Server struct {
 // implements TLS (see package crypto/tls in the standard library) all
 // communications happen in plaintext. You have been warned.
 func (s *Server) Serve(listener net.Listener) error {
-	// TODO(marcinw): scream your brains out if the listener is not using TLS.
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

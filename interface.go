@@ -8,8 +8,13 @@ import (
 // HandlerFactory is an object capable of creating both error and per-session
 // handlers.
 type HandlerFactory interface {
-	// TODO(marcinw): document.
-	HandleError(err error)
+	// GetSessionHandler returns a Handler object for a session with a
+	// remote client (peer). Returning a nil Handler is an option if the
+	// server does not want to communicate with this particuar client - in
+	// this case the session is not created but it is advisable to log the
+	// fact to aid in debugging - the Server consciously avoids any sorf of
+	// logging itself.
+	GetSessionHandler(peer net.Addr) Handler
 }
 
 // Handler is an object capable of serving a POP3 connection.
