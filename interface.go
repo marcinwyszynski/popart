@@ -5,8 +5,7 @@ import (
 	"net"
 )
 
-// HandlerFactory is an object capable of creating both error and per-session
-// handlers.
+// HandlerFactory is an object capable of creating per-session handlers.
 type HandlerFactory interface {
 	// GetSessionHandler returns a Handler object for a session with a
 	// remote client (peer). Returning a nil Handler is an option if the
@@ -27,7 +26,12 @@ type Handler interface {
 	// every method.
 	AuthenticatePASS(username, password string) error
 
-	// TODO(marcinw): explain.
+	// AuthenticateAPOP provides an alternative method of POP3
+	// authentication where instead of a username/password combination the
+	// client generates an md5 hexdigest based on a shared secret and the
+	// banner displayed by the server at the beginning of the connection.
+	// As per RFC1939 a server MUST support at least one authentication
+	// mechanism but does not need to support any particular one.
 	AuthenticateAPOP(username, hexdigest string) error
 
 	// DeleteMessage takes a list of ordinal number of messages in a user's
@@ -77,6 +81,8 @@ type Handler interface {
 	SetBanner(banner string) error
 
 	// UnlockMaildrop releases global maildrop lock so that other clients
-	// can connect and initiate their sessions.
+	// can connect and initiate their sessions. It is generally the very
+	// last thing that will be called on a connection under normal
+	// circumstances.
 	UnlockMaildrop() error
 }
