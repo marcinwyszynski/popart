@@ -1,9 +1,5 @@
 package popart
 
-import (
-	"strings"
-)
-
 var (
 	errInvalidSyntax   = NewReportableError("invalid syntax")
 	errUnexpectedState = NewReportableError("unexpected state transition")
@@ -41,14 +37,14 @@ func validates(opts ...option) *validator {
 	return ret
 }
 
-func (v *validator) validate(s *session, args []string) ReportableError {
+func (v *validator) validate(s *session, args []string) error {
 	if err := v.allowedState(s); err != nil {
 		return err
 	}
 	return v.allowedArity(args)
 }
 
-func (v *validator) allowedState(s *session) ReportableError {
+func (v *validator) allowedState(s *session) error {
 	for _, state := range v.allowedStates {
 		if state == s.state {
 			return nil
@@ -57,7 +53,7 @@ func (v *validator) allowedState(s *session) ReportableError {
 	return errUnexpectedState
 }
 
-func (v *validator) allowedArity(args []string) ReportableError {
+func (v *validator) allowedArity(args []string) error {
 	for _, ar := range v.allowedArities {
 		if ar == len(args) {
 			return nil

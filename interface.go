@@ -60,7 +60,7 @@ type Handler interface {
 	// maildrop and returns its size in bytes. This may differ from what is
 	// eventually returned to the client because of line ending replacements
 	// and dot escapes but it should be reasonably close nevertheless.
-	GetMessageSize(number uint64) error
+	GetMessageSize(number uint64) (uint64, error)
 
 	// HandleSessionError would be invoked if the code *outside* of the
 	// handler errors produces an error. The session itself will terminate

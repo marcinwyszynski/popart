@@ -1,8 +1,6 @@
 package popart
 
 import (
-	"fmt"
-	"log"
 	"net"
 	"time"
 )

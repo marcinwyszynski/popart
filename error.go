@@ -13,12 +13,12 @@ type ReportableError struct {
 
 // NewReportableError provides a helper function for creating instances of
 // ReportableError.
-func NewReportableError(format string, args ...interface{}) ReportableError {
-	return ReportableError{
+func NewReportableError(format string, args ...interface{}) error {
+	return &ReportableError{
 		message: fmt.Sprintf(format, args),
 	}
 }
 
-func (r ReportableError) Error() string {
+func (r *ReportableError) Error() string {
 	return r.message
 }

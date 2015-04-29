@@ -114,7 +114,7 @@ func (s *session) serve() {
 
 func (s *session) handleAPOP(args []string) error {
 	if !s.server.APOP {
-		return ReportableError("server does not support APOP")
+		return NewReportableError("server does not support APOP")
 	}
 	if err := s.handler.AuthenticateAPOP(args[0], args[1]); err != nil {
 		return err
@@ -123,15 +123,15 @@ func (s *session) handleAPOP(args []string) error {
 }
 
 func (s *session) handleDELE(args []string) error {
-	return s.withMessageDo(args[0], func(msgId uint64) {
-		s.markedDeleted[msgNo] = struct{}{}
-		return s.respondOK("message %d deleted", msgNo)
+	return s.withMessageDo(args[0], func(msgId uint64) error {
+		s.markedDeleted[msgId] = struct{}{}
+		return s.respondOK("message %d deleted", msgId)
 	})
 }
 
 func (s *session) handleLIST(args []string) error {
 	if len(args) == 1 {
-		return s.withMessageDo(args[0], func(msgId uint64) {
+		return s.withMessageDo(args[0], func(msgId uint64) error {
 			return s.respondOK("%d %d", msgId, s.msgSizes[msgId])
 		})
 	}
@@ -148,7 +148,7 @@ func (s *session) handlePASS(args []string) error {
 	if s.username == "" {
 		return NewReportableError("please provide username first")
 	}
-	if err := s.AuthenticatePASS(s.username, args[0]); err != nil {
+	if err := s.handler.AuthenticatePASS(s.username, args[0]); err != nil {
 		return err
 	}
 	return s.signIn()
@@ -157,7 +157,7 @@ func (s *session) handlePASS(args []string) error {
 func (s *session) handleQUIT(args []string) error {
 	bye := func() error {
 		s.state = stateTerminateConnection
-		return s.respondOK(goodbyeMsg)
+		return s.respondOK("dewey POP3 server signing off")
 	}
 	if s.state == stateAuthorization {
 		return bye()
@@ -190,7 +190,7 @@ func (s *session) handleRETR(args []string) (err error) {
 	})
 }
 
-func (s *session) handleRSET(args []string) (err error) {
+func (s *session) handleRSET(args []string) error {
 	s.markedDeleted = make(map[uint64]struct{})
 	return s.respondOK(
 		"maildrop has %d messages (%d octets)",
@@ -199,12 +199,12 @@ func (s *session) handleRSET(args []string) (err error) {
 	)
 }
 
-func (s *session) handleSTAT(args []string) (err error) {
+func (s *session) handleSTAT(args []string) error {
 	return s.respondOK("%d %d", s.getMessageCount(), s.getMaildropSize())
 }
 
-func (s *session) handleTOP(args []string) (err error) {
-	return s.withMessageDo(args[0], func(msgId uint64) {
+func (s *session) handleTOP(args []string) error {
+	return s.withMessageDo(args[0], func(msgId uint64) error {
 		noLines, err := strconv.ParseUint(args[1], 10, 64)
 		if err != nil {
 			return errInvalidSyntax
@@ -220,8 +220,8 @@ func (s *session) handleTOP(args []string) (err error) {
 		dotWriter := s.writer.DotWriter()
 		defer s.closeOrReport(dotWriter)
 		protoReader := textproto.NewReader(bufio.NewReader(readCloser))
-		for i := 0; i < noLines; i++ {
-			line, readErr := protoReader.ReadLine()
+		for i := uint64(0); i < noLines; i++ {
+			line, readErr := protoReader.ReadLineBytes()
 			if readErr == io.EOF || readErr == nil {
 				if _, err := dotWriter.Write(line); err != nil {
 					return err
@@ -233,7 +233,7 @@ func (s *session) handleTOP(args []string) (err error) {
 			if readErr != nil {
 				return err
 			}
-			if _, err := dotWriter.Write("\n"); err != nil {
+			if _, err := dotWriter.Write([]byte{'\n'}); err != nil {
 				return err
 			}
 		}
@@ -243,7 +243,7 @@ func (s *session) handleTOP(args []string) (err error) {
 
 func (s *session) handleUIDL(args []string) (err error) {
 	if len(args) == 1 {
-		return s.withMessageDo(args[0], func(msgId uint64) {
+		return s.withMessageDo(args[0], func(msgId uint64) error {
 			uidl, err := s.handler.GetMessageID(msgId)
 			if err != nil {
 				return err
@@ -265,7 +265,7 @@ func (s *session) handleError(err error) {
 	if err != nil {
 		return
 	}
-	rErr, isReportable := err.(ReportableError)
+	rErr, isReportable := err.(*ReportableError)
 	if isReportable {
 		if err = s.writer.PrintfLine("-ERR %s", rErr); err == nil {
 			return
@@ -280,11 +280,11 @@ func (s *session) respondOK(format string, args ...interface{}) error {
 }
 
 func (s *session) fetchMaildropStats() error {
-	msgCount, err := s.GetMessageCount()
+	msgCount, err := s.handler.GetMessageCount()
 	if err != nil {
 		return err
 	}
-	for i := 0; i < msgCount; i++ {
+	for i := uint64(0); i < msgCount; i++ {
 		mSize, err := s.handler.GetMessageSize(i + 1)
 		if err != nil {
 			return err
@@ -295,7 +295,7 @@ func (s *session) fetchMaildropStats() error {
 }
 
 func (s *session) signIn() error {
-	if err := s.LockMaildrop(); err != nil {
+	if err := s.handler.LockMaildrop(); err != nil {
 		return err
 	}
 	s.state = stateTransaction
@@ -311,7 +311,7 @@ func (s *session) signIn() error {
 }
 
 func (s *session) getMessageCount() uint64 {
-	return len(s.msgSizes) - len(s.markedDeleted)
+	return uint64(len(s.msgSizes) - len(s.markedDeleted))
 }
 
 func (s *session) getMaildropSize() uint64 {
@@ -327,8 +327,8 @@ func (s *session) getMaildropSize() uint64 {
 
 func (s *session) forEachMessage(fn func(id uint64) (string, error)) error {
 	dotWriter := s.writer.DotWriter()
-	defer s.closeOrReport(closer)
-	for i := 0; i < len(s.msgSizes); i++ {
+	defer s.closeOrReport(dotWriter)
+	for i := uint64(0); i < uint64(len(s.msgSizes)); i++ {
 		if _, deleted := s.markedDeleted[i+1]; deleted {
 			continue
 		}
@@ -336,7 +336,7 @@ func (s *session) forEachMessage(fn func(id uint64) (string, error)) error {
 		if err != nil {
 			return err
 		}
-		if err := dotWriter.PrintfLine(line); err != nil {
+		if _, err := fmt.Fprintln(dotWriter, line); err != nil {
 			return err
 		}
 	}
@@ -348,11 +348,11 @@ func (s *session) withMessageDo(sID string, fn func(id uint64) error) error {
 	if err != nil {
 		return errInvalidSyntax
 	}
-	if msgID == 0 || msgID > len(s.msgSizes) {
-		return NewReportableError("no such message: %d", msgNo)
+	if msgID == 0 || msgID > uint64(len(s.msgSizes)) {
+		return NewReportableError("no such message: %d", msgID)
 	}
-	if _, gone := s.markedDeleted[msgNo]; gone {
-		return NewReportableError("message %d already deleted", msgId)
+	if _, gone := s.markedDeleted[msgID]; gone {
+		return NewReportableError("message %d already deleted", msgID)
 	}
 	return fn(msgID)
 }
@@ -370,7 +370,7 @@ func (s *session) getBanner() string {
 	return fmt.Sprintf(
 		"<%d.%d@%s>",
 		os.Getpid(),
-		time.Time().Unix(),
+		time.Now().Unix(),
 		s.server.Hostname,
 	)
 }
