@@ -1,6 +1,7 @@
 package popart
 
 import (
+	"errors"
 	"net"
 	"time"
 )
@@ -31,6 +32,12 @@ type Server struct {
 // implements TLS (see package crypto/tls in the standard library) all
 // communications happen in plaintext. You have been warned.
 func (s *Server) Serve(listener net.Listener) error {
+	if s.Factory == nil {
+		return errors.New("handler factory can not be nil")
+	}
+	if s.Timeout < 10*time.Minute {
+		return errors.New("at least 10 minutes timeout required")
+	}
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
