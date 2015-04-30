@@ -11,7 +11,7 @@ type HandlerFactory interface {
 	// remote client (peer). Returning a nil Handler is an option if the
 	// server does not want to communicate with this particuar client - in
 	// this case the session is not created but it is advisable to log the
-	// fact to aid in debugging - the Server consciously avoids any sorf of
+	// fact to aid in debugging - the Server consciously avoids any sort of
 	// logging itself.
 	GetSessionHandler(peer net.Addr) Handler
 }
@@ -20,7 +20,7 @@ type HandlerFactory interface {
 type Handler interface {
 	// AuthenticatePASS is generally the first method called on a Handler
 	// and should authentication fail it will return an error. It is
-	// expected though that if the authentication is succesful the handler
+	// expected though that if the authentication is successful the handler
 	// will be able to associate all subsequent operations with this
 	// particular user without an explicit need to pass username to each and
 	// every method.
