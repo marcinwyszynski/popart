@@ -14,9 +14,9 @@ type Server struct {
 	// authentication method.
 	Hostname string
 
-	// Factory is a dependency capable of producing Handler objects which
-	// help the server handle incoming connections.
-	Factory HandlerFactory
+	// OnNewConnection is a callback capable of producing Handler objects
+	// to handle incoming connections.
+	OnNewConnection func(peer net.Addr) Handler
 
 	// Timeout allows setting an inactivity autologout timer. According to
 	// rfc1939 such a timer MUST be of at least 10 minutes' duration.
@@ -32,8 +32,8 @@ type Server struct {
 // implements TLS (see package crypto/tls in the standard library) all
 // communications happen in plaintext. You have been warned.
 func (s *Server) Serve(listener net.Listener) error {
-	if s.Factory == nil {
-		return errors.New("handler factory can not be nil")
+	if s.OnNewConnection == nil {
+		return errors.New("new connection callback not be nil")
 	}
 	if s.Timeout < 10*time.Minute {
 		return errors.New("at least 10 minutes timeout required")
@@ -47,12 +47,13 @@ func (s *Server) Serve(listener net.Listener) error {
 			}
 			return err
 		}
-		handler := s.Factory.GetSessionHandler(conn.RemoteAddr())
+		handler := s.OnNewConnection(conn.RemoteAddr())
 		if handler == nil {
 			// This must have been a conscious decision on the
 			// part of the HandlerFactory so not treating that as
 			// an error. In fact, not even logging it since the
-			// HandlerFactory is perfectly capable of doing that.
+			// OnNewConnection callback is perfectly capable of
+			// doing that.
 			continue
 		}
 		sn := newSession(s, handler, conn)

@@ -2,19 +2,7 @@ package popart
 
 import (
 	"io"
-	"net"
 )
-
-// HandlerFactory is an object capable of creating per-session handlers.
-type HandlerFactory interface {
-	// GetSessionHandler returns a Handler object for a session with a
-	// remote client (peer). Returning a nil Handler is an option if the
-	// server does not want to communicate with this particuar client - in
-	// this case the session is not created but it is advisable to log the
-	// fact to aid in debugging - the Server consciously avoids any sort of
-	// logging itself.
-	GetSessionHandler(peer net.Addr) Handler
-}
 
 // Handler is an object capable of serving a POP3 connection.
 type Handler interface {
