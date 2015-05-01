@@ -83,33 +83,40 @@ func (s *session) serve() {
 		return // communication problem, most likely?
 	}
 	for {
-		if s.state == stateTerminateConnection {
+		if keepGoing := s.serveOne(); !keepGoing {
 			return
 		}
-		err := s.conn.SetReadDeadline(time.Now().Add(s.server.Timeout))
-		if err != nil {
-			s.handleError(err)
-			return
-		}
-		line, err := s.reader.ReadLine()
-		if err != nil {
-			s.handleError(err)
-			return // communication problem, most likely?
-		}
-		args := strings.Split(line, " ")
-		command := strings.ToUpper(args[0])
-		cmdValidator, exists := validators[command]
-		if !exists {
-			s.handleError(errInvalidSyntax)
-			continue // unknown command
-		}
-		if err := cmdValidator.validate(s, args[1:]); err != nil {
-			s.handleError(err) // these are always reportable
-			continue
-		}
-		action := operationHandlers[command]
-		s.handleError(action(s, args[1:]))
 	}
+}
+
+func (s *session) serveOne() bool {
+	if s.state == stateTerminateConnection {
+		return false
+	}
+	readBy := time.Now().Add(s.server.Timeout)
+	if err := s.conn.SetReadDeadline(readBy); err != nil {
+		s.handleError(err)
+		return false
+	}
+	line, err := s.reader.ReadLine()
+	if err != nil {
+		s.handleError(err)
+		return false // communication problem, most likely?
+	}
+	args := strings.Split(line, " ")
+	command := strings.ToUpper(args[0])
+	cmdValidator, exists := validators[command]
+	if !exists {
+		s.handleError(errInvalidSyntax)
+		return true // unknown command
+	}
+	if err := cmdValidator.validate(s, args[1:]); err != nil {
+		s.handleError(err) // these are always reportable
+		return true
+	}
+	action := operationHandlers[command]
+	s.handleError(action(s, args[1:]))
+	return true
 }
 
 func (s *session) handleAPOP(args []string) error {
