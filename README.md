@@ -18,4 +18,13 @@ Installation
 go get github.com/slowmail-io/popart
 ```
 
+Example
+---
 
+The `example` directory contains an example implementation which takes a path to a directory containing email messages (using `--maildir` flag) and serves them through POP3 protocol. It runs on port 1100 by default (can be changed with `--port` flag) and without SSL so you can connect to it directly using telnet:
+
+```
+$ telnet localhost 1100
+```
+
+Then you can have a nice POP3 chat. The example implementation will actually *not* delete your messages so that you can play around with the same set of files without having to continuously to feed the directory new mail to delete ;)
