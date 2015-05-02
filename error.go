@@ -15,7 +15,7 @@ type ReportableError struct {
 // ReportableError.
 func NewReportableError(format string, args ...interface{}) error {
 	return &ReportableError{
-		message: fmt.Sprintf(format, args),
+		message: fmt.Sprintf(format, args...),
 	}
 }
 

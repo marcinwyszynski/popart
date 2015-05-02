@@ -259,7 +259,11 @@ func (s *session) handleUIDL(args []string) (err error) {
 		})
 	}
 	return s.forEachMessage(func(msgId uint64) (string, error) {
-		return fmt.Sprintf("%d %d", msgId, s.msgSizes[msgId]), nil
+		uidl, err := s.handler.GetMessageID(msgId)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%d %s", msgId, uidl), nil
 	})
 }
 
@@ -269,7 +273,7 @@ func (s *session) handleUSER(args []string) (err error) {
 }
 
 func (s *session) handleError(err error) {
-	if err != nil {
+	if err == nil {
 		return
 	}
 	rErr, isReportable := err.(*ReportableError)
@@ -283,7 +287,7 @@ func (s *session) handleError(err error) {
 }
 
 func (s *session) respondOK(format string, args ...interface{}) error {
-	return s.writer.PrintfLine(fmt.Sprintf("+OK %s", format), args)
+	return s.writer.PrintfLine(fmt.Sprintf("+OK %s", format), args...)
 }
 
 func (s *session) fetchMaildropStats() error {
