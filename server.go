@@ -2,7 +2,9 @@ package popart
 
 import (
 	"errors"
+	"fmt"
 	"net"
+	"os"
 	"time"
 )
 
@@ -59,4 +61,14 @@ func (s *Server) Serve(listener net.Listener) error {
 		sn := newSession(s, handler, conn)
 		go sn.serve()
 	}
+}
+
+// getBanner is only relevant within the context of an APOP exchange.
+func (s *Server) getBanner() string {
+	return fmt.Sprintf(
+		"<%d.%d@%s>",
+		os.Getpid(),
+		time.Now().Unix(),
+		s.Hostname,
+	)
 }

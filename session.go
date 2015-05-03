@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"net/textproto"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -66,12 +65,14 @@ func newSession(server *Server, handler Handler, conn net.Conn) *session {
 	}
 }
 
+// serve method handles the entire session which after the first message from
+// the server is a series of command-response interactions.
 func (s *session) serve() {
 	defer s.conn.Close()
 	defer s.unlock() // unlock maildrop if locked no matter what
 	helloParts := []string{"POP3 server ready"}
 	if s.server.APOP {
-		banner := s.getBanner()
+		banner := s.server.getBanner()
 		helloParts = append(helloParts, banner)
 		if err := s.handler.SetBanner(banner); err != nil {
 			s.handler.HandleSessionError(err)
@@ -89,6 +90,9 @@ func (s *session) serve() {
 	}
 }
 
+// serveOne handles each command-response interaction with the client. The
+// boolean return value indicates whether the communication with the client
+// should continue or not.
 func (s *session) serveOne() bool {
 	if s.state == stateTerminateConnection {
 		return false
@@ -119,6 +123,8 @@ func (s *session) serveOne() bool {
 	return true
 }
 
+// handleAPOP is a callback for an APOP authentication mechanism.
+// RFC 1939, page 15.
 func (s *session) handleAPOP(args []string) error {
 	if !s.server.APOP {
 		return NewReportableError("server does not support APOP")
@@ -129,6 +135,8 @@ func (s *session) handleAPOP(args []string) error {
 	return s.signIn()
 }
 
+// handleDELE is a callback for a single message deletion.
+// RFC 1939, page 8.
 func (s *session) handleDELE(args []string) error {
 	return s.withMessageDo(args[0], func(msgId uint64) error {
 		s.markedDeleted[msgId] = struct{}{}
@@ -136,6 +144,8 @@ func (s *session) handleDELE(args []string) error {
 	})
 }
 
+// handleAPOP is a callback for listing one or more messages.
+// RFC 1939, page 6.
 func (s *session) handleLIST(args []string) error {
 	if len(args) == 1 {
 		return s.withMessageDo(args[0], func(msgId uint64) error {
@@ -147,10 +157,16 @@ func (s *session) handleLIST(args []string) error {
 	})
 }
 
+// handleNOOP is a callback for a no-op (timeout reset) command.
+// RFC 1939, page 9.
 func (s *session) handleNOOP(args []string) error {
 	return s.respondOK("doing nothing")
 }
 
+// handlePASS is a callback for the client providing password ("PASS" command).
+// This must have been preceded by a "USER" command where the client provides
+// its username.
+// RFC 1939, page 14.
 func (s *session) handlePASS(args []string) error {
 	if s.username == "" {
 		return NewReportableError("please provide username first")
@@ -161,6 +177,9 @@ func (s *session) handlePASS(args []string) error {
 	return s.signIn()
 }
 
+// handleQUIT is a callback for the client terminating the session. It will do
+// slightly different things depending on the current state of the transaction.
+// RFC 1939, pages 5 (in authorization state) and 10 (in transaction state).
 func (s *session) handleQUIT(args []string) error {
 	bye := func() error {
 		s.state = stateTerminateConnection
@@ -180,6 +199,9 @@ func (s *session) handleQUIT(args []string) error {
 	return bye()
 }
 
+// handleRETR is a callback for the client requesting full content of a a single
+// message.
+// RFC 1939, page 8.
 func (s *session) handleRETR(args []string) (err error) {
 	return s.withMessageDo(args[0], func(msgId uint64) error {
 		if err := s.respondOK("%d octets", s.msgSizes[msgId]); err != nil {
@@ -197,6 +219,10 @@ func (s *session) handleRETR(args []string) (err error) {
 	})
 }
 
+// handleRSET is a callback for the client requesting the session to be reset.
+// This essentially means undeleting all messages previously marked for
+// deletion.
+// RFC 1939, page 9.
 func (s *session) handleRSET(args []string) error {
 	s.markedDeleted = make(map[uint64]struct{})
 	return s.respondOK(
@@ -206,10 +232,16 @@ func (s *session) handleRSET(args []string) error {
 	)
 }
 
+// handleRETR is a callback for the client requesting full content of a a single
+// message.
+// RFC 1939, page 8.
 func (s *session) handleSTAT(args []string) error {
 	return s.respondOK("%d %d", s.getMessageCount(), s.getMaildropSize())
 }
 
+// handleTOP is a callback for the client requesting a number of lines from the
+// top of a single message.
+// RFC 1939, page 11.
 func (s *session) handleTOP(args []string) error {
 	return s.withMessageDo(args[0], func(msgId uint64) error {
 		noLines, err := strconv.ParseUint(args[1], 10, 64)
@@ -248,6 +280,9 @@ func (s *session) handleTOP(args []string) error {
 	})
 }
 
+// handleUIDL is a callback for the client unique message identifiers for
+// either one or all messages.
+// RFC 1939, page 12.
 func (s *session) handleUIDL(args []string) (err error) {
 	if len(args) == 1 {
 		return s.withMessageDo(args[0], func(msgId uint64) error {
@@ -267,11 +302,19 @@ func (s *session) handleUIDL(args []string) (err error) {
 	})
 }
 
+// handleUSER is a callback for the client providing it's username. This must be
+// followed by a "PASS" command with a corresponding password.
+// RFC 1939, page 13.
 func (s *session) handleUSER(args []string) (err error) {
 	s.username = args[0]
 	return s.respondOK("welcome %s", s.username)
 }
 
+// handleError provides a helper to decide what to do with the result of a
+// single command handler. There are three possible outcomes. First - the
+// command succeeded. Second, the command failed but the failure is reported to
+// the user and the transaction continues. Third, an error occurred that calls
+// for and immediate termination of the session.
 func (s *session) handleError(err error) {
 	if err == nil {
 		return
@@ -286,10 +329,16 @@ func (s *session) handleError(err error) {
 	s.handler.HandleSessionError(err)
 }
 
+// respondOK provides a helper to write a "success" line to the client, with
+// printf-like formatting. It will only fail if it is impossible to write to the
+// client (e.g. closed TCP socket).
 func (s *session) respondOK(format string, args ...interface{}) error {
 	return s.writer.PrintfLine(fmt.Sprintf("+OK %s", format), args...)
 }
 
+// fetchMaildropStats queries the handler for message count and sizes and builds
+// based on that builds maildrop statistics that are then cached internally
+// throughout the whole length of the session.
 func (s *session) fetchMaildropStats() error {
 	msgCount, err := s.handler.GetMessageCount()
 	if err != nil {
@@ -305,6 +354,9 @@ func (s *session) fetchMaildropStats() error {
 	return nil
 }
 
+// signIn is called after successful authentication whereby the protocol
+// requires that the maildrop is not available to any other users trying to
+// access it concurrently (RFC 1939, page 3).
 func (s *session) signIn() error {
 	if err := s.handler.LockMaildrop(); err != nil {
 		return err
@@ -321,10 +373,12 @@ func (s *session) signIn() error {
 	)
 }
 
+// getMessageCount reports the relevant number based on cached data.
 func (s *session) getMessageCount() uint64 {
 	return uint64(len(s.msgSizes) - len(s.markedDeleted))
 }
 
+// getMaildropSize reports the relevant number based on cached data.
 func (s *session) getMaildropSize() uint64 {
 	var ret uint64
 	for msgID, size := range s.msgSizes {
@@ -336,6 +390,9 @@ func (s *session) getMaildropSize() uint64 {
 	return ret
 }
 
+// forEachMessage is a helper that allows a callback to be invoked for every
+// message in the maildrop that is not deleted. The callback is expected to
+// return a line that is then printed out to the client.
 func (s *session) forEachMessage(fn func(id uint64) (string, error)) error {
 	dotWriter := s.writer.DotWriter()
 	defer s.closeOrReport(dotWriter)
@@ -354,6 +411,9 @@ func (s *session) forEachMessage(fn func(id uint64) (string, error)) error {
 	return nil
 }
 
+// withMessageDo is a wrapper for handlers operating on a single message. It
+// generally makes sure that the message number provided makes sense within
+// the context of the current transaction.
 func (s *session) withMessageDo(sID string, fn func(id uint64) error) error {
 	msgID, err := strconv.ParseUint(sID, 10, 64)
 	if err != nil {
@@ -368,6 +428,8 @@ func (s *session) withMessageDo(sID string, fn func(id uint64) error) error {
 	return fn(msgID)
 }
 
+// unlock will unlock the client's maildrop if it is locked. Note that we assume
+// the mailbox is locked if the exchange proceeded past the authorization stage.
 func (s *session) unlock() {
 	if s.state == stateAuthorization {
 		return // we didn't yet even have a chance to lock the maildrop
@@ -377,15 +439,8 @@ func (s *session) unlock() {
 	}
 }
 
-func (s *session) getBanner() string {
-	return fmt.Sprintf(
-		"<%d.%d@%s>",
-		os.Getpid(),
-		time.Now().Unix(),
-		s.server.Hostname,
-	)
-}
-
+// closer provides a wrapper that allows deferred 'Close' operations to have
+// their errors reported to the session error handler.
 func (s *session) closeOrReport(closer io.Closer) {
 	if err := closer.Close(); err != nil {
 		s.handler.HandleSessionError(err)
