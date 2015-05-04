@@ -17,7 +17,7 @@ var (
 
 func getHandler(peer net.Addr) popart.Handler {
 	log.Printf("Incoming connection from %q", peer)
-	handler, err := NewMaildirHander(*maildir)
+	handler, err := NewMaildirHandler(*maildir)
 	if err != nil {
 		log.Printf("Error while creating handler: %v, expected nil", err)
 	}

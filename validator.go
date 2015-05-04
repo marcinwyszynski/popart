@@ -7,8 +7,8 @@ var (
 
 var (
 	validators = map[string]*validator{
-		"APOP": validates(state(stateAuthorization, stateTransaction), arity(0)),
-		"CAPA": validates(state(stateAuthorization), arity(2)),
+		"APOP": validates(state(stateAuthorization), arity(2)),
+		"CAPA": validates(state(stateAuthorization, stateTransaction), arity(0),
 		"DELE": validates(state(stateTransaction), arity(1)),
 		"LIST": validates(state(stateTransaction), arity(0, 1)),
 		"NOOP": validates(state(stateTransaction), arity(0)),

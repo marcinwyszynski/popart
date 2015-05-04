@@ -27,7 +27,7 @@ type maildirHandler struct {
 	username string
 }
 
-func NewMaildirHander(dirname string) (popart.Handler, error) {
+func NewMaildirHandler(dirname string) (popart.Handler, error) {
 	fileInfos, err := ioutil.ReadDir(dirname)
 	if err != nil {
 		return nil, err
