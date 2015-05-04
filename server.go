@@ -24,9 +24,21 @@ type Server struct {
 	// rfc1939 such a timer MUST be of at least 10 minutes' duration.
 	Timeout time.Duration
 
+	// Implementation allows the server to provide custom implementation
+	// name to the POP3 client. The default one is "popart".
+	Implementation string
+
+	// Expire allows the server to provide message expiration advice to the
+	// client. The default one is "NEVER".
+	Expire string
+
 	// APOP determines whether the server should implement the APOP
 	// authentication method.
 	APOP bool
+
+	// capabilites is a pre-calculated set of things server can announce to
+	// the client upon receiving the CAPA command.
+	capabilities []string
 }
 
 // Serve takes a net.Listener and starts processing incoming requests. Please
@@ -40,6 +52,7 @@ func (s *Server) Serve(listener net.Listener) error {
 	if s.Timeout < 10*time.Minute {
 		return errors.New("at least 10 minutes timeout required")
 	}
+	s.calculateCapabilities()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -60,6 +73,23 @@ func (s *Server) Serve(listener net.Listener) error {
 		}
 		sn := newSession(s, handler, conn)
 		go sn.serve()
+	}
+}
+
+func (s *Server) calculateCapabilities() {
+	if s.Implementation == "" {
+		s.Implementation = "popart"
+	}
+	if s.Expire == "" {
+		s.Expire = "NEVER"
+	}
+	s.capabilities = []string{
+		"TOP",
+		"USER", // TODO: this should be factored out.
+		"PIPELINING",
+		fmt.Sprintf("%s %s", "EXPIRE", s.Expire),
+		"UIDL",
+		fmt.Sprintf("%s %s", "IMPLEMENTATION", s.Implementation),
 	}
 }
 

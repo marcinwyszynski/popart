@@ -23,6 +23,7 @@ type operationHandler func(s *session, args []string) error
 var (
 	operationHandlers = map[string]operationHandler{
 		"APOP": (*session).handleAPOP,
+		"CAPA": (*session).handleCAPA,
 		"DELE": (*session).handleDELE,
 		"LIST": (*session).handleLIST,
 		"NOOP": (*session).handleNOOP,
@@ -121,6 +122,22 @@ func (s *session) serveOne() bool {
 	action := operationHandlers[command]
 	s.handleError(action(s, args[1:]))
 	return true
+}
+
+// handleCAPA is a callback for capability listing.
+// RFC 2449, page 2.
+func (s *session) handleCAPA(args []string) error {
+	if err := s.respondOK("Capability list follows"); err != nil {
+		return err
+	}
+	dotWriter := s.writer.DotWriter()
+	defer s.closeOrReport(dotWriter)
+	for _, capability := range s.server.capabilities {
+		if _, err := fmt.Fprintln(dotWriter, capability); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // handleAPOP is a callback for an APOP authentication mechanism.
