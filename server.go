@@ -46,34 +46,48 @@ type Server struct {
 // implements TLS (see package crypto/tls in the standard library) all
 // communications happen in plaintext. You have been warned.
 func (s *Server) Serve(listener net.Listener) error {
+	if err := s.verifySettings(); err != nil {
+		return err
+	}
+	s.calculateCapabilities()
+	for {
+		conn, err := listener.Accept()
+		if err != nil && s.handleAcceptError(err) != nil {
+			return err
+		}
+		s.serveOne(conn)
+	}
+}
+
+func (s *Server) handleAcceptError(err error) error {
+	if ne, ok := err.(net.Error); ok && ne.Temporary() {
+		time.Sleep(time.Second)
+		return nil
+	}
+	return err
+}
+
+func (s *Server) verifySettings() error {
 	if s.OnNewConnection == nil {
 		return errors.New("new connection callback not be nil")
 	}
 	if s.Timeout < 10*time.Minute {
 		return errors.New("at least 10 minutes timeout required")
 	}
-	s.calculateCapabilities()
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				time.Sleep(time.Second)
-				continue
-			}
-			return err
-		}
-		handler := s.OnNewConnection(conn.RemoteAddr())
-		if handler == nil {
-			// This must have been a conscious decision on the
-			// part of the HandlerFactory so not treating that as
-			// an error. In fact, not even logging it since the
-			// OnNewConnection callback is perfectly capable of
-			// doing that.
-			continue
-		}
-		sn := newSession(s, handler, conn)
-		go sn.serve()
+	return nil
+}
+
+func (s *Server) serveOne(conn net.Conn) {
+	handler := s.OnNewConnection(conn.RemoteAddr())
+	if handler == nil {
+		// This must have been a conscious decision on the
+		// part of the HandlerFactory so not treating that as
+		// an error. In fact, not even logging it since the
+		// OnNewConnection callback is perfectly capable of
+		// doing that.
+		return
 	}
+	go newSession(s, handler, conn).serve()
 }
 
 func (s *Server) calculateCapabilities() {
