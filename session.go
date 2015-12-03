@@ -57,8 +57,6 @@ func newSession(server *Server, handler Handler, conn net.Conn) *session {
 		server:        server,
 		handler:       handler,
 		conn:          conn,
-		state:         stateAuthorization,
-		username:      "",
 		markedDeleted: make(map[uint64]struct{}),
 		msgSizes:      make(map[uint64]uint64),
 		reader:        textproto.NewReader(bufio.NewReader(conn)),
@@ -100,28 +98,22 @@ func (s *session) serveOne() bool {
 	}
 	readBy := time.Now().Add(s.server.Timeout)
 	if err := s.conn.SetReadDeadline(readBy); err != nil {
-		s.handleError(err)
-		return false
+		return s.handleError(err, false)
 	}
 	line, err := s.reader.ReadLine()
 	if err != nil {
-		s.handleError(err)
-		return false // communication problem, most likely?
+		return s.handleError(err, false) // communication problem, most likely?
 	}
 	args := strings.Split(line, " ")
 	command := strings.ToUpper(args[0])
 	cmdValidator, exists := validators[command]
 	if !exists {
-		s.handleError(errInvalidSyntax)
-		return true // unknown command
+		return s.handleError(errInvalidSyntax, true) // unknown command
 	}
 	if err := cmdValidator.validate(s, args[1:]); err != nil {
-		s.handleError(err) // these are always reportable
-		return true
+		return s.handleError(err, true)
 	}
-	action := operationHandlers[command]
-	s.handleError(action(s, args[1:]))
-	return true
+	return s.handleError(operationHandlers[command](s, args[1:]), true)
 }
 
 // handleCAPA is a callback for capability listing.
@@ -278,23 +270,29 @@ func (s *session) handleTOP(args []string) error {
 		protoReader := textproto.NewReader(bufio.NewReader(readCloser))
 		for i := uint64(0); i < noLines; i++ {
 			line, readErr := protoReader.ReadLineBytes()
-			if readErr == io.EOF || readErr == nil {
-				if _, err := dotWriter.Write(line); err != nil {
-					return err
-				}
-			}
-			if readErr == io.EOF {
-				break
-			}
-			if readErr != nil {
-				return err
-			}
-			if _, err := dotWriter.Write([]byte{'\n'}); err != nil {
+			if err := printTopLine(line, readErr, dotWriter); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+func printTopLine(line []byte, readErr error, writer io.Writer) error {
+	if readErr == io.EOF || readErr == nil {
+		if err := writeWithError(writer, line); err != nil {
+			return err
+		}
+	}
+	if readErr != nil {
+		return readErr
+	}
+	return writeWithError(writer, []byte{'\n'})
+}
+
+func writeWithError(w io.Writer, content []byte) error {
+	_, err := w.Write(content)
+	return err
 }
 
 // handleUIDL is a callback for the client unique message identifiers for
@@ -332,18 +330,19 @@ func (s *session) handleUSER(args []string) (err error) {
 // command succeeded. Second, the command failed but the failure is reported to
 // the user and the transaction continues. Third, an error occurred that calls
 // for and immediate termination of the session.
-func (s *session) handleError(err error) {
+func (s *session) handleError(err error, shouldContinue bool) bool {
 	if err == nil {
-		return
+		return shouldContinue
 	}
 	rErr, isReportable := err.(*ReportableError)
 	if isReportable {
 		if err = s.writer.PrintfLine("-ERR %s", rErr); err == nil {
-			return
+			return shouldContinue
 		}
 	}
 	s.state = stateTerminateConnection // will terminate the connection!
 	s.handler.HandleSessionError(err)
+	return shouldContinue
 }
 
 // respondOK provides a helper to write a "success" line to the client, with
@@ -399,10 +398,9 @@ func (s *session) getMessageCount() uint64 {
 func (s *session) getMaildropSize() uint64 {
 	var ret uint64
 	for msgID, size := range s.msgSizes {
-		if _, deleted := s.markedDeleted[msgID]; deleted {
-			continue
+		if _, deleted := s.markedDeleted[msgID]; !deleted {
+			ret += size
 		}
-		ret += size
 	}
 	return ret
 }

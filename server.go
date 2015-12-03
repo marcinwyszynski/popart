@@ -91,20 +91,9 @@ func (s *Server) serveOne(conn net.Conn) {
 }
 
 func (s *Server) calculateCapabilities() {
-	if s.Implementation == "" {
-		s.Implementation = "popart"
-	}
-	if s.Expire == "" {
-		s.Expire = "NEVER"
-	}
-	s.capabilities = []string{
-		"TOP",
-		"USER", // TODO: this should be factored out.
-		"PIPELINING",
-		fmt.Sprintf("%s %s", "EXPIRE", s.Expire),
-		"UIDL",
-		fmt.Sprintf("%s %s", "IMPLEMENTATION", s.Implementation),
-	}
+	s.Expire = withDefault(s.Expire, "NEVER")
+	s.Implementation = withDefault(s.Implementation, "popart")
+	s.capabilities = capabilities(s.Expire, s.Implementation)
 }
 
 // getBanner is only relevant within the context of an APOP exchange.
@@ -115,4 +104,22 @@ func (s *Server) getBanner() string {
 		time.Now().Unix(),
 		s.Hostname,
 	)
+}
+
+func capabilities(expire, implementation string) []string {
+	return []string{
+		"TOP",
+		"USER", // TODO: this should be factored out.
+		"PIPELINING",
+		fmt.Sprintf("%s %s", "EXPIRE", expire),
+		"UIDL",
+		fmt.Sprintf("%s %s", "IMPLEMENTATION", implementation),
+	}
+}
+
+func withDefault(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
