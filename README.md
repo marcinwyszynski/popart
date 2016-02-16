@@ -1,5 +1,7 @@
-# popart [![GoDoc](https://godoc.org/github.com/slowmail-io/popart?status.svg)](https://godoc.org/github.com/slowmail-io/popart)
+# popart [![GoDoc](https://godoc.org/github.com/slowmail-io/popart?status.svg)](https://godoc.org/github.com/slowmail-io/popart) [![codebeat badge](https://codebeat.co/badges/7c72f4f2-ba1a-453d-85fe-fb3936af3c8a)](https://codebeat.co/projects/github-com-slowmail-io-popart)
+
 POP3 server library for Go
+
 ![Artwork](http://blogs.artinfo.com/artintheair/files/2012/10/Newsweek-cover-crop.jpg)
 
 Philosophy
